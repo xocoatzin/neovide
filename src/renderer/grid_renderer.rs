@@ -8,10 +8,10 @@ use skia_safe::{
 
 use crate::{
     dimensions::Dimensions,
-    editor::{Colors, Style, UnderlineStyle},
-    renderer::{CachingShaper, RendererSettings},
-    settings::*,
-    window::WindowSettings,
+    renderer::{CachingShaper},
+    // settings::*,
+    // window::WindowSettings,
+    Colors, Style, UnderlineStyle, 
 };
 
 pub struct GridRenderer {
@@ -103,24 +103,24 @@ impl GridRenderer {
         let region = self.compute_text_region(grid_position, cell_width);
         let style = style.as_ref().unwrap_or(&self.default_style);
 
-        if SETTINGS.get::<RendererSettings>().debug_renderer {
-            let random_hsv: HSV = (rand::random::<f32>() * 360.0, 0.3, 0.3).into();
-            let random_color = random_hsv.to_color(255);
-            self.paint.set_color(random_color);
-        } else {
-            self.paint
-                .set_color(style.background(&self.default_style.colors).to_color());
-        }
+        // if SETTINGS.get::<RendererSettings>().debug_renderer {
+        //     let random_hsv: HSV = (rand::random::<f32>() * 360.0, 0.3, 0.3).into();
+        //     let random_color = random_hsv.to_color(255);
+        //     self.paint.set_color(random_color);
+        // } else {
+        //     self.paint
+        //         .set_color(style.background(&self.default_style.colors).to_color());
+        // }
 
-        if is_floating {
-            self.paint
-                .set_alpha((255.0 * ((100 - style.blend) as f32 / 100.0)) as u8);
-        } else if (SETTINGS.get::<WindowSettings>().transparency - 1.0).abs() > f32::EPSILON
-            // Only make background color transparent
-            && self.paint.color() == self.get_default_background()
-        {
-            self.paint.set_alpha(0);
-        }
+        // if is_floating {
+        //     self.paint
+        //         .set_alpha((255.0 * ((100 - style.blend) as f32 / 100.0)) as u8);
+        // } else if (SETTINGS.get::<WindowSettings>().transparency - 1.0).abs() > f32::EPSILON
+        //     // Only make background color transparent
+        //     && self.paint.color() == self.get_default_background()
+        // {
+        //     self.paint.set_alpha(0);
+        // }
         canvas.draw_rect(region, &self.paint);
     }
 
@@ -162,14 +162,14 @@ impl GridRenderer {
 
         let y_adjustment = self.shaper.y_adjustment();
 
-        if SETTINGS.get::<RendererSettings>().debug_renderer {
-            let random_hsv: HSV = (rand::random::<f32>() * 360.0, 1.0, 1.0).into();
-            let random_color = random_hsv.to_color(255);
-            self.paint.set_color(random_color);
-        } else {
-            self.paint
-                .set_color(style.foreground(&self.default_style.colors).to_color());
-        }
+        // if SETTINGS.get::<RendererSettings>().debug_renderer {
+        //     let random_hsv: HSV = (rand::random::<f32>() * 360.0, 1.0, 1.0).into();
+        //     let random_color = random_hsv.to_color(255);
+        //     self.paint.set_color(random_color);
+        // } else {
+        // }
+        self.paint
+            .set_color(style.foreground(&self.default_style.colors).to_color());
         self.paint.set_anti_alias(false);
 
         for blob in self
@@ -205,9 +205,10 @@ impl GridRenderer {
         canvas.save();
 
         let mut underline_paint = self.paint.clone();
-        let auto_scaling = SETTINGS
-            .get::<RendererSettings>()
-            .underline_automatic_scaling;
+        let auto_scaling = false;
+            // SETTINGS
+            // .get::<RendererSettings>()
+            // .underline_automatic_scaling;
         // Arbitrary value under which we simply round the line thickness to 1. Anything else
         // results in ugly aliasing artifacts.
         let stroke_width = if self.shaper.current_size() < 15. || auto_scaling == false {

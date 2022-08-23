@@ -10,6 +10,12 @@ mod draw_background;
 use skia_safe::Color4f;
 use std::time::{Duration, Instant};
 
+use skia_safe::{
+    gpu::SurfaceOrigin, Budgeted, Canvas, EncodedImageFormat, ImageInfo, Surface, SurfaceProps,
+    SurfacePropsFlags,
+};
+use std::{fs, io::Write, path::Path};
+
 use glutin::{
     self,
     dpi::PhysicalSize,
@@ -39,11 +45,11 @@ use crate::{
     bridge::{ParallelCommand, UiCommand},
     cmd_line::CmdLineSettings,
     dimensions::Dimensions,
-    editor::{EditorCommand, Style, Colors, UnderlineStyle},
+    editor::{Colors, EditorCommand, Style, UnderlineStyle},
     event_aggregator::EVENT_AGGREGATOR,
     frame::Frame,
     redraw_scheduler::REDRAW_SCHEDULER,
-    renderer::{LineFragment, Renderer},
+    renderer::{grid_renderer::GridRenderer, LineFragment, Renderer},
     running_tracker::*,
     settings::{
         load_last_window_settings, save_window_geometry, PersistentWindowSettings, SETTINGS,
@@ -51,128 +57,72 @@ use crate::{
 };
 pub use settings::{KeyboardSettings, WindowSettings};
 
-const MIN_WINDOW_WIDTH: u64 = 20;
-const MIN_WINDOW_HEIGHT: u64 = 6;
+// fn build_window_surface(parent_canvas: &mut Canvas, pixel_size: (i32, i32)) -> Surface {
+//     let mut context = parent_canvas.recording_context().unwrap();
+//     let budgeted = Budgeted::Yes;
+//     let parent_image_info = parent_canvas.image_info();
+//     let image_info = ImageInfo::new(
+//         pixel_size,
+//         parent_image_info.color_type(),
+//         parent_image_info.alpha_type(),
+//         parent_image_info.color_space(),
+//     );
+//     let surface_origin = SurfaceOrigin::TopLeft;
+//     // subpixel layout (should be configurable/obtained from fontconfig)
+//     let props = SurfaceProps::new(SurfacePropsFlags::default(), skia_safe::PixelGeometry::RGBH);
+//     Surface::new_render_target(
+//         &mut context,
+//         budgeted,
+//         &image_info,
+//         None,
+//         surface_origin,
+//         Some(&props),
+//         None,
+//     )
+//     .expect("Could not create surface")
+// }
 
-pub struct GlutinWindowWrapper {
-    // windowed_context: WindowedContext<glutin::PossiblyCurrent>,
-    skia_renderer: SkiaRenderer,
-    renderer: Renderer,
-    // keyboard_manager: KeyboardManager,
-    // mouse_manager: MouseManager,
-    // title: String,
-    // fullscreen: bool,
-    // saved_inner_size: PhysicalSize<u32>,
-    // saved_grid_size: Option<Dimensions>,
-    // size_at_startup: PhysicalSize<u32>,
-    // window_command_receiver: UnboundedReceiver<WindowCommand>,
-}
-
-impl GlutinWindowWrapper {
-    // pub fn send_font_names(&self) {
-    //     let font_names = self.renderer.font_names();
-    //     EVENT_AGGREGATOR.send(UiCommand::Parallel(ParallelCommand::DisplayAvailableFonts(
-    //         font_names,
-    //     )));
-    // }
-
-    // pub fn handle_quit(&mut self) {
-    //     RUNNING_TRACKER.quit("window closed");
-    // }
-
-    // pub fn handle_event(&mut self, event: Event<()>) {
-    //     self.renderer.handle_event(&event);
-    // }
-
-    pub fn draw_frame(&mut self, dt: f32) {
-        // let window = self.windowed_context.window();
-        let mut font_changed = false;
-
-        // if REDRAW_SCHEDULER.should_draw() || SETTINGS.get::<WindowSettings>().no_idle {
-        //     font_changed = self.renderer.draw_frame(self.skia_renderer.canvas());
-        //     self.skia_renderer.gr_context.flush(None);
-        //     // self.windowed_context.swap_buffers().unwrap();
-        // }
-        //
-
-        // Wait until fonts are loaded, so we can set proper window size.
-        // if !self.renderer.grid_renderer.is_ready {
-        //     return;
-        // }
-
-        // let new_size = window.inner_size();
-
-        let settings = SETTINGS.get::<CmdLineSettings>();
-
-        // if self.saved_grid_size.is_none() && !false {
-        //     window.set_inner_size(
-        //         self.renderer
-        //             .grid_renderer
-        //             .convert_grid_to_physical(settings.geometry),
-        //     );
-        //     self.saved_grid_size = Some(settings.geometry);
-        //     // Font change at startup is ignored, so grid size (and startup screen) could be preserved.
-        //     // But only when not resized yet. With maximized or resized window we should redraw grid.
-        //     font_changed = false;
-        // }
-        //
-        // if self.saved_inner_size != new_size || font_changed {
-        //     self.saved_inner_size = new_size;
-        //     self.handle_new_grid_size(new_size);
-        //     self.skia_renderer.resize(&self.windowed_context);
-        // }
-    }
-
-    // fn handle_new_grid_size(&mut self, new_size: PhysicalSize<u32>) {
-    //     let grid_size = self
-    //         .renderer
-    //         .grid_renderer
-    //         .convert_physical_to_grid(new_size);
-    //
-    //     EVENT_AGGREGATOR.send(UiCommand::Parallel(ParallelCommand::Resize {
-    //         width: grid_size.width,
-    //         height: grid_size.height,
-    //     }));
-    // }
-
-    // fn handle_scale_factor_update(&mut self, scale_factor: f64) {
-    //     self.renderer
-    //         .grid_renderer
-    //         .handle_scale_factor_update(scale_factor);
-    //     EVENT_AGGREGATOR.send(EditorCommand::RedrawScreen);
-    // }
-}
+// fn build_window_surface_with_grid_size(
+//     parent_canvas: &mut Canvas,
+//     grid_renderer: &GridRenderer,
+//     grid_size: Dimensions,
+// ) -> Surface {
+//     let mut surface = build_window_surface(
+//         parent_canvas,
+//         (grid_size * grid_renderer.font_dimensions).into(),
+//     );
+//
+//     let canvas = surface.canvas();
+//     canvas.clear(grid_renderer.get_default_background());
+//     surface
+// }
 
 pub fn create_window() {
-    let event_loop = EventLoop::new();
+    // let event_loop = EventLoop::new();
 
     // let cmd_line_settings = SETTINGS.get::<CmdLineSettings>();
 
-    let winit_window_builder = window::WindowBuilder::new()
-        .with_transparent(true)
-        .with_decorations(false);
+    // let winit_window_builder = window::WindowBuilder::new()
+    //     .with_transparent(true)
+    //     .with_decorations(false);
 
-    let windowed_context = ContextBuilder::new()
-        .with_pixel_format(24, 8)
-        .with_stencil_buffer(8)
-        .with_gl_profile(GlProfile::Core)
-        .with_vsync(false)
-        // .with_srgb(cmd_line_settings.srgb)
-        .build_windowed(winit_window_builder, &event_loop)
-        .unwrap();
-    let windowed_context = unsafe { windowed_context.make_current().unwrap() };
+    // let windowed_context = ContextBuilder::new()
+    //     .with_pixel_format(24, 8)
+    //     .with_stencil_buffer(8)
+    //     .with_gl_profile(GlProfile::Core)
+    //     .with_vsync(false)
+    //     // .with_srgb(cmd_line_settings.srgb)
+    //     .build_windowed(winit_window_builder, &event_loop)
+    //     .unwrap();
+    // let windowed_context = unsafe { windowed_context.make_current().unwrap() };
+    //
+    // let scale_factor = windowed_context.window().scale_factor();
+    // let mut skia_renderer = SkiaRenderer::new(&windowed_context);
+    let mut grid_renderer = GridRenderer::new(1.0);
 
-    let window = windowed_context.window();
-    // let initial_size = window.inner_size();
-
-    let scale_factor = windowed_context.window().scale_factor();
-    let mut skia_renderer = SkiaRenderer::new(&windowed_context);
-    let mut renderer = Renderer::new(skia_renderer.canvas(), scale_factor);
-    // let saved_inner_size = window.inner_size();
-
-    let fragments: Vec<LineFragment> = [
+    let line_fragments: Vec<LineFragment> = [
         LineFragment {
-            text: "Hello".to_string(),
+            text: "Hello -> =>".to_string(),
             style: None,
             window_left: 0,
             window_top: 0,
@@ -180,44 +130,34 @@ pub fn create_window() {
         },
         LineFragment {
             text: "Bye".to_string(),
-            style: Some(
-                Arc::new(
-                    Style {
-                        reverse: false,
-                        italic: true,
-                        bold: true,
-                        strikethrough: false,
-                        blend: 120,
-                        underline: Some(UnderlineStyle::UnderCurl),
-                        colors: Colors {
-                            foreground: Some(
-                                Color4f {
-                                    a: 1.0,
-                                    b: 0.2,
-                                    g: 1.0,
-                                    r: 1.0,
-                                }
-                            ),
-                            background: Some(
-                                Color4f {
-                                    a: 1.0,
-                                    b: 0.4,
-                                    g: 0.2,
-                                    r: 0.2,
-                                }
-                            ),
-                            special: Some(
-                                Color4f {
-                                    a: 1.0,
-                                    b: 0.5,
-                                    g: 0.5,
-                                    r: 0.5,
-                                }
-                            ),
-                        }
-                    }
-                )
-            ),
+            style: Some(Arc::new(Style {
+                reverse: false,
+                italic: true,
+                bold: true,
+                strikethrough: false,
+                blend: 120,
+                underline: Some(UnderlineStyle::UnderCurl),
+                colors: Colors {
+                    foreground: Some(Color4f {
+                        a: 1.0,
+                        b: 0.2,
+                        g: 1.0,
+                        r: 1.0,
+                    }),
+                    background: Some(Color4f {
+                        a: 1.0,
+                        b: 0.4,
+                        g: 0.2,
+                        r: 0.2,
+                    }),
+                    special: Some(Color4f {
+                        a: 1.0,
+                        b: 0.5,
+                        g: 0.5,
+                        r: 0.5,
+                    }),
+                },
+            })),
             window_left: 0,
             window_top: 20,
             width: 50,
@@ -225,8 +165,76 @@ pub fn create_window() {
     ]
     .to_vec();
 
-    renderer.draw_frame(skia_renderer.canvas(), fragments);
-    // skia_renderer.gr_context.flush(None);
+
+    // let mut root_canvas = skia_renderer.canvas();
+    //
+    // let mut surface =
+    //     build_window_surface_with_grid_size(root_canvas, &grid_renderer, (100, 100).into());
+    
+
+
+
+    let mut surface = Surface::new_raster_n32_premul((2000, 1000)).unwrap();
+
+
+
+
+
+
+
+    let canvas = surface.canvas();
+
+    canvas.save();
+    for line_fragment in line_fragments.iter() {
+        let LineFragment {
+            window_left,
+            window_top,
+            width,
+            style,
+            ..
+        } = line_fragment;
+        let grid_position = (*window_left, *window_top);
+        grid_renderer.draw_background(canvas, grid_position, *width, style, false);
+    }
+
+    for line_fragment in line_fragments.into_iter() {
+        let LineFragment {
+            text,
+            window_left,
+            window_top,
+            width,
+            style,
+        } = line_fragment;
+        let grid_position = (window_left, window_top);
+        grid_renderer.draw_foreground(canvas, text, grid_position, width, &style);
+    }
+    canvas.restore();
+
+    // let default_background = grid_renderer.get_default_background();
+    // let font_dimensions = grid_renderer.font_dimensions;
+    //
+    // let transparency = { SETTINGS.get::<WindowSettings>().transparency };
+    // root_canvas.clear(default_background.with_a((255.0 * transparency) as u8));
+    // root_canvas.save();
+    // root_canvas.reset_matrix();
+
+    let snapshot = surface.image_snapshot();
+
+    let data = snapshot.encode_to_data(EncodedImageFormat::PNG).unwrap();
+    let ext = "png";
+    let path = Path::new("/tmp");
+    let name = "example";
+
+    fs::create_dir_all(&path).expect("failed to create directory");
+
+    let mut file_path = path.join(name);
+    file_path.set_extension(ext);
+
+    let mut file = fs::File::create(file_path).expect("failed to create file");
+    file.write_all(data.as_bytes())
+        .expect("failed to write to file");
+
+    // root_canvas.restore();
 }
 //
 //    Get colors lua

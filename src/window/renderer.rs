@@ -1,6 +1,7 @@
 use std::convert::TryInto;
 
 use gl::types::*;
+use glutin::PixelFormat;
 use skia_safe::{
     gpu::{gl::FramebufferInfo, BackendRenderTarget, DirectContext, SurfaceOrigin},
     Canvas, ColorType, Surface,
@@ -14,11 +15,19 @@ fn create_surface(
     fb_info: FramebufferInfo,
 ) -> Surface {
     let pixel_format = windowed_context.get_pixel_format();
-    let size = windowed_context.window().inner_size();
-    let size = (
-        size.width.try_into().expect("Could not convert width"),
-        size.height.try_into().expect("Could not convert height"),
-    );
+    // let pixel_format = PixelFormat {
+    //     hardware_accelerated: false,
+    //     color_bits: 24,
+    //     alpha_bits: 8,
+    //     depth_bits: 8,
+    //     stencil_bits: 8,
+    //     stereoscopy: false,
+    //     double_buffer: false,
+    //     multisampling: None,
+    //     srgb: false,
+    // };
+    // let size = windowed_context.window().inner_size();
+    let size = (800, 600);
     let backend_render_target = BackendRenderTarget::new_gl(
         size,
         pixel_format
@@ -30,7 +39,7 @@ fn create_surface(
             .expect("Could not convert stencil"),
         fb_info,
     );
-    windowed_context.resize(size.into());
+    // windowed_context.resize(size.into());
     Surface::from_backend_render_target(
         gr_context,
         &backend_render_target,
