@@ -84,7 +84,7 @@ impl SkiaRenderer {
         self.surface.canvas()
     }
 
-    pub fn resize(&mut self, windowed_context: &WindowedContext) {
-        self.surface = create_surface(windowed_context, &mut self.gr_context, self.fb_info);
-    }
+    // pub fn resize(&mut self, windowed_context: &WindowedContext) {
+    //     self.surface = create_surface(windowed_context, &mut self.gr_context, self.fb_info);
+    // }
 }

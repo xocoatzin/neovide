@@ -13,7 +13,7 @@ use crate::{
     event_aggregator::EVENT_AGGREGATOR,
     redraw_scheduler::REDRAW_SCHEDULER,
     renderer::DrawCommand,
-    window::WindowCommand,
+    // window::WindowCommand,
 };
 
 pub use cursor::{Cursor, CursorMode, CursorShape};
@@ -80,9 +80,9 @@ impl Editor {
     pub fn handle_editor_command(&mut self, command: EditorCommand) {
         match command {
             EditorCommand::NeovimRedrawEvent(event) => match event {
-                RedrawEvent::SetTitle { title } => {
-                    EVENT_AGGREGATOR.send(WindowCommand::TitleChanged(title));
-                }
+                // RedrawEvent::SetTitle { title } => {
+                //     EVENT_AGGREGATOR.send(WindowCommand::TitleChanged(title));
+                // }
                 RedrawEvent::ModeInfoSet { cursor_modes } => {
                     self.mode_list = cursor_modes;
                     if let Some(current_mode_i) = self.current_mode_index {
@@ -104,10 +104,10 @@ impl Editor {
                         .ok();
                 }
                 RedrawEvent::MouseOn => {
-                    EVENT_AGGREGATOR.send(WindowCommand::SetMouseEnabled(true));
+                    // EVENT_AGGREGATOR.send(WindowCommand::SetMouseEnabled(true));
                 }
                 RedrawEvent::MouseOff => {
-                    EVENT_AGGREGATOR.send(WindowCommand::SetMouseEnabled(false));
+                    // EVENT_AGGREGATOR.send(WindowCommand::SetMouseEnabled(false));
                 }
                 RedrawEvent::BusyStart => {
                     trace!("Cursor off");
@@ -426,7 +426,7 @@ impl Editor {
         trace!("Option set {:?}", &gui_option);
         if let GuiOption::GuiFont(guifont) = gui_option {
             if guifont == *"*" {
-                EVENT_AGGREGATOR.send(WindowCommand::ListAvailableFonts);
+                // EVENT_AGGREGATOR.send(WindowCommand::ListAvailableFonts);
             }
 
             self.draw_command_batcher

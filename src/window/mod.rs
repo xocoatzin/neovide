@@ -1,11 +1,13 @@
-mod keyboard_manager;
-mod mouse_manager;
+// mod keyboard_manager;
+// mod mouse_manager;
 mod renderer;
 mod settings;
+use std::{collections::HashMap, sync::Arc};
 
 #[cfg(target_os = "macos")]
 mod draw_background;
 
+use skia_safe::Color4f;
 use std::time::{Duration, Instant};
 
 use glutin::{
@@ -29,19 +31,19 @@ use draw_background::draw_background;
 use glutin::platform::unix::WindowBuilderExtUnix;
 
 use image::{load_from_memory, GenericImageView, Pixel};
-use keyboard_manager::KeyboardManager;
-use mouse_manager::MouseManager;
+// use keyboard_manager::KeyboardManager;
+// use mouse_manager::MouseManager;
 use renderer::SkiaRenderer;
 
 use crate::{
     bridge::{ParallelCommand, UiCommand},
     cmd_line::CmdLineSettings,
     dimensions::Dimensions,
-    editor::EditorCommand,
+    editor::{EditorCommand, Style, Colors, UnderlineStyle},
     event_aggregator::EVENT_AGGREGATOR,
     frame::Frame,
     redraw_scheduler::REDRAW_SCHEDULER,
-    renderer::Renderer,
+    renderer::{LineFragment, Renderer},
     running_tracker::*,
     settings::{
         load_last_window_settings, save_window_geometry, PersistentWindowSettings, SETTINGS,
@@ -49,430 +51,224 @@ use crate::{
 };
 pub use settings::{KeyboardSettings, WindowSettings};
 
-static ICON: &[u8] = include_bytes!("../../assets/neovide.ico");
-
 const MIN_WINDOW_WIDTH: u64 = 20;
 const MIN_WINDOW_HEIGHT: u64 = 6;
 
-#[derive(Clone, Debug)]
-pub enum WindowCommand {
-    TitleChanged(String),
-    SetMouseEnabled(bool),
-    ListAvailableFonts,
-}
-
 pub struct GlutinWindowWrapper {
-    windowed_context: WindowedContext<glutin::PossiblyCurrent>,
+    // windowed_context: WindowedContext<glutin::PossiblyCurrent>,
     skia_renderer: SkiaRenderer,
     renderer: Renderer,
-    keyboard_manager: KeyboardManager,
-    mouse_manager: MouseManager,
-    title: String,
-    fullscreen: bool,
-    saved_inner_size: PhysicalSize<u32>,
-    saved_grid_size: Option<Dimensions>,
-    size_at_startup: PhysicalSize<u32>,
-    window_command_receiver: UnboundedReceiver<WindowCommand>,
+    // keyboard_manager: KeyboardManager,
+    // mouse_manager: MouseManager,
+    // title: String,
+    // fullscreen: bool,
+    // saved_inner_size: PhysicalSize<u32>,
+    // saved_grid_size: Option<Dimensions>,
+    // size_at_startup: PhysicalSize<u32>,
+    // window_command_receiver: UnboundedReceiver<WindowCommand>,
 }
 
 impl GlutinWindowWrapper {
-    pub fn toggle_fullscreen(&mut self) {
-        let window = self.windowed_context.window();
-        if self.fullscreen {
-            window.set_fullscreen(None);
-        } else {
-            let handle = window.current_monitor();
-            window.set_fullscreen(Some(Fullscreen::Borderless(handle)));
-        }
+    // pub fn send_font_names(&self) {
+    //     let font_names = self.renderer.font_names();
+    //     EVENT_AGGREGATOR.send(UiCommand::Parallel(ParallelCommand::DisplayAvailableFonts(
+    //         font_names,
+    //     )));
+    // }
 
-        self.fullscreen = !self.fullscreen;
-    }
+    // pub fn handle_quit(&mut self) {
+    //     RUNNING_TRACKER.quit("window closed");
+    // }
 
-    pub fn synchronize_settings(&mut self) {
-        let fullscreen = { SETTINGS.get::<WindowSettings>().fullscreen };
-
-        if self.fullscreen != fullscreen {
-            self.toggle_fullscreen();
-        }
-    }
-
-    #[allow(clippy::needless_collect)]
-    pub fn handle_window_commands(&mut self) {
-        while let Ok(window_command) = self.window_command_receiver.try_recv() {
-            match window_command {
-                WindowCommand::TitleChanged(new_title) => self.handle_title_changed(new_title),
-                WindowCommand::SetMouseEnabled(mouse_enabled) => {
-                    self.mouse_manager.enabled = mouse_enabled
-                }
-                WindowCommand::ListAvailableFonts => self.send_font_names(),
-            }
-        }
-    }
-
-    pub fn handle_title_changed(&mut self, new_title: String) {
-        self.title = new_title;
-        self.windowed_context.window().set_title(&self.title);
-    }
-
-    pub fn send_font_names(&self) {
-        let font_names = self.renderer.font_names();
-        EVENT_AGGREGATOR.send(UiCommand::Parallel(ParallelCommand::DisplayAvailableFonts(
-            font_names,
-        )));
-    }
-
-    pub fn handle_quit(&mut self) {
-        if SETTINGS.get::<CmdLineSettings>().remote_tcp.is_none() {
-            EVENT_AGGREGATOR.send(UiCommand::Parallel(ParallelCommand::Quit));
-        } else {
-            RUNNING_TRACKER.quit("window closed");
-        }
-    }
-
-    pub fn handle_focus_lost(&mut self) {
-        EVENT_AGGREGATOR.send(UiCommand::Parallel(ParallelCommand::FocusLost));
-    }
-
-    pub fn handle_focus_gained(&mut self) {
-        EVENT_AGGREGATOR.send(UiCommand::Parallel(ParallelCommand::FocusGained));
-        REDRAW_SCHEDULER.queue_next_frame();
-    }
-
-    pub fn handle_event(&mut self, event: Event<()>) {
-        self.keyboard_manager.handle_event(&event);
-        self.mouse_manager.handle_event(
-            &event,
-            &self.keyboard_manager,
-            &self.renderer,
-            &self.windowed_context,
-        );
-        self.renderer.handle_event(&event);
-        match event {
-            Event::LoopDestroyed => {
-                self.handle_quit();
-            }
-            Event::Resumed => {
-                EVENT_AGGREGATOR.send(EditorCommand::RedrawScreen);
-            }
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => {
-                self.handle_quit();
-            }
-            Event::WindowEvent {
-                event: WindowEvent::ScaleFactorChanged { scale_factor, .. },
-                ..
-            } => {
-                self.handle_scale_factor_update(scale_factor);
-            }
-            Event::WindowEvent {
-                event: WindowEvent::DroppedFile(path),
-                ..
-            } => {
-                let file_path = path.into_os_string().into_string().unwrap();
-                EVENT_AGGREGATOR.send(UiCommand::Parallel(ParallelCommand::FileDrop(file_path)));
-            }
-            Event::WindowEvent {
-                event: WindowEvent::Focused(focus),
-                ..
-            } => {
-                if focus {
-                    self.handle_focus_gained();
-                } else {
-                    self.handle_focus_lost();
-                }
-            }
-            Event::RedrawRequested(..) | Event::WindowEvent { .. } => {
-                REDRAW_SCHEDULER.queue_next_frame()
-            }
-            _ => {}
-        }
-    }
+    // pub fn handle_event(&mut self, event: Event<()>) {
+    //     self.renderer.handle_event(&event);
+    // }
 
     pub fn draw_frame(&mut self, dt: f32) {
-        let window = self.windowed_context.window();
+        // let window = self.windowed_context.window();
         let mut font_changed = false;
 
-        if REDRAW_SCHEDULER.should_draw() || SETTINGS.get::<WindowSettings>().no_idle {
-            font_changed = self.renderer.draw_frame(self.skia_renderer.canvas(), dt);
-            self.skia_renderer.gr_context.flush(None);
-            self.windowed_context.swap_buffers().unwrap();
-        }
+        // if REDRAW_SCHEDULER.should_draw() || SETTINGS.get::<WindowSettings>().no_idle {
+        //     font_changed = self.renderer.draw_frame(self.skia_renderer.canvas());
+        //     self.skia_renderer.gr_context.flush(None);
+        //     // self.windowed_context.swap_buffers().unwrap();
+        // }
+        //
 
         // Wait until fonts are loaded, so we can set proper window size.
-        if !self.renderer.grid_renderer.is_ready {
-            return;
-        }
+        // if !self.renderer.grid_renderer.is_ready {
+        //     return;
+        // }
 
-        let new_size = window.inner_size();
+        // let new_size = window.inner_size();
 
         let settings = SETTINGS.get::<CmdLineSettings>();
-        // Resize at startup happens when window is maximized or when using tiling WM
-        // which already resized window.
-        let resized_at_startup = settings.maximized || self.has_been_resized();
 
-        log::trace!(
-            "Settings geometry {:?}",
-            PhysicalSize::from(settings.geometry)
-        );
-        log::trace!("Inner size: {:?}", new_size);
-
-        if self.saved_grid_size.is_none() && !resized_at_startup {
-            window.set_inner_size(
-                self.renderer
-                    .grid_renderer
-                    .convert_grid_to_physical(settings.geometry),
-            );
-            self.saved_grid_size = Some(settings.geometry);
-            // Font change at startup is ignored, so grid size (and startup screen) could be preserved.
-            // But only when not resized yet. With maximized or resized window we should redraw grid.
-            font_changed = false;
-        }
-
-        if self.saved_inner_size != new_size || font_changed {
-            self.saved_inner_size = new_size;
-            self.handle_new_grid_size(new_size);
-            self.skia_renderer.resize(&self.windowed_context);
-        }
+        // if self.saved_grid_size.is_none() && !false {
+        //     window.set_inner_size(
+        //         self.renderer
+        //             .grid_renderer
+        //             .convert_grid_to_physical(settings.geometry),
+        //     );
+        //     self.saved_grid_size = Some(settings.geometry);
+        //     // Font change at startup is ignored, so grid size (and startup screen) could be preserved.
+        //     // But only when not resized yet. With maximized or resized window we should redraw grid.
+        //     font_changed = false;
+        // }
+        //
+        // if self.saved_inner_size != new_size || font_changed {
+        //     self.saved_inner_size = new_size;
+        //     self.handle_new_grid_size(new_size);
+        //     self.skia_renderer.resize(&self.windowed_context);
+        // }
     }
 
-    fn handle_new_grid_size(&mut self, new_size: PhysicalSize<u32>) {
-        let grid_size = self
-            .renderer
-            .grid_renderer
-            .convert_physical_to_grid(new_size);
+    // fn handle_new_grid_size(&mut self, new_size: PhysicalSize<u32>) {
+    //     let grid_size = self
+    //         .renderer
+    //         .grid_renderer
+    //         .convert_physical_to_grid(new_size);
+    //
+    //     EVENT_AGGREGATOR.send(UiCommand::Parallel(ParallelCommand::Resize {
+    //         width: grid_size.width,
+    //         height: grid_size.height,
+    //     }));
+    // }
 
-        // Have a minimum size
-        if grid_size.width < MIN_WINDOW_WIDTH || grid_size.height < MIN_WINDOW_HEIGHT {
-            return;
-        }
-
-        if self.saved_grid_size == Some(grid_size) {
-            trace!("Grid matched saved size, skip update.");
-            return;
-        }
-        self.saved_grid_size = Some(grid_size);
-        EVENT_AGGREGATOR.send(UiCommand::Parallel(ParallelCommand::Resize {
-            width: grid_size.width,
-            height: grid_size.height,
-        }));
-    }
-
-    fn handle_scale_factor_update(&mut self, scale_factor: f64) {
-        self.renderer
-            .grid_renderer
-            .handle_scale_factor_update(scale_factor);
-        EVENT_AGGREGATOR.send(EditorCommand::RedrawScreen);
-    }
-
-    fn has_been_resized(&self) -> bool {
-        self.windowed_context.window().inner_size() != self.size_at_startup
-    }
+    // fn handle_scale_factor_update(&mut self, scale_factor: f64) {
+    //     self.renderer
+    //         .grid_renderer
+    //         .handle_scale_factor_update(scale_factor);
+    //     EVENT_AGGREGATOR.send(EditorCommand::RedrawScreen);
+    // }
 }
 
 pub fn create_window() {
-    let icon = {
-        let icon = load_from_memory(ICON).expect("Failed to parse icon data");
-        let (width, height) = icon.dimensions();
-        let mut rgba = Vec::with_capacity((width * height) as usize * 4);
-        for (_, _, pixel) in icon.pixels() {
-            rgba.extend_from_slice(&pixel.to_rgba().0);
-        }
-        Icon::from_rgba(rgba, width, height).expect("Failed to create icon object")
-    };
-
     let event_loop = EventLoop::new();
 
-    let cmd_line_settings = SETTINGS.get::<CmdLineSettings>();
-
-    let mut maximized = cmd_line_settings.maximized;
-    let mut previous_position = None;
-    if let Ok(last_window_settings) = load_last_window_settings() {
-        match last_window_settings {
-            PersistentWindowSettings::Maximized => {
-                maximized = true;
-            }
-            PersistentWindowSettings::Windowed { position, .. } => {
-                previous_position = Some(position);
-            }
-        }
-    }
+    // let cmd_line_settings = SETTINGS.get::<CmdLineSettings>();
 
     let winit_window_builder = window::WindowBuilder::new()
-        .with_title("Neovide")
-        .with_window_icon(Some(icon))
-        .with_maximized(maximized)
-        .with_transparent(true);
-
-    let frame_decoration = cmd_line_settings.frame;
-
-    // There is only two options for windows & linux, no need to match more options.
-    #[cfg(not(target_os = "macos"))]
-    let mut winit_window_builder =
-        winit_window_builder.with_decorations(frame_decoration == Frame::Full);
-
-    #[cfg(target_os = "macos")]
-    let mut winit_window_builder = match frame_decoration {
-        Frame::Full => winit_window_builder,
-        Frame::None => winit_window_builder.with_decorations(false),
-        Frame::Buttonless => winit_window_builder
-            .with_transparent(true)
-            .with_title_hidden(true)
-            .with_titlebar_buttons_hidden(true)
-            .with_titlebar_transparent(true)
-            .with_fullsize_content_view(true),
-        Frame::Transparent => winit_window_builder
-            .with_title_hidden(true)
-            .with_titlebar_transparent(true)
-            .with_fullsize_content_view(true),
-    };
-
-    if let Some(previous_position) = previous_position {
-        if !maximized {
-            winit_window_builder = winit_window_builder.with_position(previous_position);
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    let winit_window_builder = winit_window_builder
-        .with_app_id(cmd_line_settings.wayland_app_id)
-        .with_class(
-            cmd_line_settings.x11_wm_class_instance,
-            cmd_line_settings.x11_wm_class,
-        );
+        .with_transparent(true)
+        .with_decorations(false);
 
     let windowed_context = ContextBuilder::new()
         .with_pixel_format(24, 8)
         .with_stencil_buffer(8)
         .with_gl_profile(GlProfile::Core)
         .with_vsync(false)
-        .with_srgb(cmd_line_settings.srgb)
+        // .with_srgb(cmd_line_settings.srgb)
         .build_windowed(winit_window_builder, &event_loop)
         .unwrap();
     let windowed_context = unsafe { windowed_context.make_current().unwrap() };
 
     let window = windowed_context.window();
-    let initial_size = window.inner_size();
-
-    // Check that window is visible in some monitor, and reposition it if not.
-    let did_reposition = window
-        .current_monitor()
-        .and_then(|current_monitor| {
-            let monitor_position = current_monitor.position();
-            let monitor_size = current_monitor.size();
-            let monitor_width = monitor_size.width as i32;
-            let monitor_height = monitor_size.height as i32;
-
-            let window_position = window.outer_position().ok()?;
-            let window_size = window.outer_size();
-            let window_width = window_size.width as i32;
-            let window_height = window_size.height as i32;
-
-            if window_position.x + window_width < monitor_position.x
-                || window_position.y + window_height < monitor_position.y
-                || window_position.x > monitor_position.x + monitor_width
-                || window_position.y > monitor_position.y + monitor_height
-            {
-                window.set_outer_position(monitor_position);
-            }
-
-            Some(())
-        })
-        .is_some();
-
-    log::trace!("repositioned window: {}", did_reposition);
+    // let initial_size = window.inner_size();
 
     let scale_factor = windowed_context.window().scale_factor();
-    let renderer = Renderer::new(scale_factor);
-    let saved_inner_size = window.inner_size();
+    let mut skia_renderer = SkiaRenderer::new(&windowed_context);
+    let mut renderer = Renderer::new(skia_renderer.canvas(), scale_factor);
+    // let saved_inner_size = window.inner_size();
 
-    let skia_renderer = SkiaRenderer::new(&windowed_context);
+    let fragments: Vec<LineFragment> = [
+        LineFragment {
+            text: "Hello".to_string(),
+            style: None,
+            window_left: 0,
+            window_top: 0,
+            width: 20,
+        },
+        LineFragment {
+            text: "Bye".to_string(),
+            style: Some(
+                Arc::new(
+                    Style {
+                        reverse: false,
+                        italic: true,
+                        bold: true,
+                        strikethrough: false,
+                        blend: 120,
+                        underline: Some(UnderlineStyle::UnderCurl),
+                        colors: Colors {
+                            foreground: Some(
+                                Color4f {
+                                    a: 1.0,
+                                    b: 0.2,
+                                    g: 1.0,
+                                    r: 1.0,
+                                }
+                            ),
+                            background: Some(
+                                Color4f {
+                                    a: 1.0,
+                                    b: 0.4,
+                                    g: 0.2,
+                                    r: 0.2,
+                                }
+                            ),
+                            special: Some(
+                                Color4f {
+                                    a: 1.0,
+                                    b: 0.5,
+                                    g: 0.5,
+                                    r: 0.5,
+                                }
+                            ),
+                        }
+                    }
+                )
+            ),
+            window_left: 0,
+            window_top: 20,
+            width: 50,
+        },
+    ]
+    .to_vec();
 
-    let window_command_receiver = EVENT_AGGREGATOR.register_event::<WindowCommand>();
-
-    log::info!(
-        "window created (scale_factor: {:.4}, font_dimensions: {:?})",
-        scale_factor,
-        renderer.grid_renderer.font_dimensions,
-    );
-
-    let mut window_wrapper = GlutinWindowWrapper {
-        windowed_context,
-        skia_renderer,
-        renderer,
-        keyboard_manager: KeyboardManager::new(),
-        mouse_manager: MouseManager::new(),
-        title: String::from("Neovide"),
-        fullscreen: false,
-        size_at_startup: initial_size,
-        saved_inner_size,
-        saved_grid_size: None,
-        window_command_receiver,
-    };
-
-    let mut previous_frame_start = Instant::now();
-
-    enum FocusedState {
-        Focused,
-        UnfocusedNotDrawn,
-        Unfocused,
-    }
-    let mut focused = FocusedState::Focused;
-
-    event_loop.run(move |e, _window_target, control_flow| {
-        // Window focus changed
-        if let Event::WindowEvent {
-            event: WindowEvent::Focused(focused_event),
-            ..
-        } = e
-        {
-            focused = if focused_event {
-                FocusedState::Focused
-            } else {
-                FocusedState::UnfocusedNotDrawn
-            };
-        }
-
-        if !RUNNING_TRACKER.is_running() {
-            let window = window_wrapper.windowed_context.window();
-            save_window_geometry(
-                window.is_maximized(),
-                window_wrapper.saved_grid_size,
-                window.outer_position().ok(),
-            );
-
-            std::process::exit(RUNNING_TRACKER.exit_code());
-        }
-
-        let frame_start = Instant::now();
-
-        window_wrapper.handle_window_commands();
-        window_wrapper.synchronize_settings();
-        window_wrapper.handle_event(e);
-
-        let refresh_rate = match focused {
-            FocusedState::Focused | FocusedState::UnfocusedNotDrawn => {
-                SETTINGS.get::<WindowSettings>().refresh_rate as f32
-            }
-            FocusedState::Unfocused => SETTINGS.get::<WindowSettings>().refresh_rate_idle as f32,
-        }
-        .max(1.0);
-
-        let expected_frame_length_seconds = 1.0 / refresh_rate;
-        let frame_duration = Duration::from_secs_f32(expected_frame_length_seconds);
-
-        if frame_start - previous_frame_start > frame_duration {
-            let dt = previous_frame_start.elapsed().as_secs_f32();
-            window_wrapper.draw_frame(dt);
-            if let FocusedState::UnfocusedNotDrawn = focused {
-                focused = FocusedState::Unfocused;
-            }
-            previous_frame_start = frame_start;
-            #[cfg(target_os = "macos")]
-            draw_background(&window_wrapper.windowed_context);
-        }
-
-        *control_flow = ControlFlow::WaitUntil(previous_frame_start + frame_duration)
-    });
+    renderer.draw_frame(skia_renderer.canvas(), fragments);
+    // skia_renderer.gr_context.flush(None);
 }
+//
+//    Get colors lua
+//    return fn.synIDattr(fn.synIDtrans(fn.hlID(group)), attr)
+//
+// synIDattr({synID}, {what} [, {mode}])			*synIDattr()*
+// 		The result is a String, which is the {what} attribute of
+// 		syntax ID {synID}.  This can be used to obtain information
+// 		about a syntax item.
+// 		{mode} can be "gui", "cterm" or "term", to get the attributes
+// 		for that mode.  When {mode} is omitted, or an invalid value is
+// 		used, the attributes for the currently active highlighting are
+// 		used (GUI, cterm or term).
+// 		Use synIDtrans() to follow linked highlight groups.
+// 		{what}		result
+// 		"name"		the name of the syntax item
+// 		"fg"		foreground color (GUI: color name used to set
+// 				the color, cterm: color number as a string,
+// 				term: empty string)
+// 		"bg"		background color (as with "fg")
+// 		"font"		font name (only available in the GUI)
+// 				|highlight-font|
+// 		"sp"		special color (as with "fg") |highlight-guisp|
+// 		"fg#"		like "fg", but for the GUI and the GUI is
+// 				running the name in "#RRGGBB" form
+// 		"bg#"		like "fg#" for "bg"
+// 		"sp#"		like "fg#" for "sp"
+// 		"bold"		"1" if bold
+// 		"italic"	"1" if italic
+// 		"reverse"	"1" if reverse
+// 		"inverse"	"1" if inverse (= reverse)
+// 		"standout"	"1" if standout
+// 		"underline"	"1" if underlined
+// 		"underlineline"	"1" if double underlined
+// 		"undercurl"	"1" if undercurled
+// 		"underdot"	"1" if dotted underlined
+// 		"underdash"	"1" if dashed underlined
+// 		"strikethrough" "1" if struckthrough
+//
+// 		Example (echoes the color of the syntax item under the
+// 		cursor): >
+// 	:echo synIDattr(synIDtrans(synID(line("."), col("."), 1)), "fg")
+// <
+// 		Can also be used as a |method|: >
+// 	:echo synID(line("."), col("."), 1)->synIDtrans()->synIDattr("fg")
