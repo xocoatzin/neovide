@@ -27,8 +27,8 @@ mod window;
 
 #[macro_use]
 extern crate derive_new;
-// #[macro_use]
-// extern crate lazy_static;
+#[macro_use]
+extern crate lazy_static;
 
 // use std::env::args;
 
@@ -36,90 +36,25 @@ use skia_safe::{Color4f, EncodedImageFormat, Surface};
 use std::sync::Arc;
 use std::{fs, io::Write, path::Path};
 // use cmd_line::CmdLineSettings;
-// use editor::start_editor;
+use editor::start_editor;
 // use settings::SETTINGS;
 use crate::{
-    // editor::{Colors, Style, UnderlineStyle},
-    renderer::{grid_renderer::GridRenderer, LineFragment},
-    // bridge::{ParallelCommand, UiCommand},
-    // cmd_line::CmdLineSettings,
-    // dimensions::Dimensions,
-    // settings::{
-    //     load_last_window_settings, save_window_geometry, PersistentWindowSettings, SETTINGS,
-    // },
+    editor::{Colors, Style, UnderlineStyle},
+    renderer::{grid_renderer::GridRenderer, LineFragment, RendererSettings},
+    bridge::{ParallelCommand, UiCommand},
+    cmd_line::CmdLineSettings,
+    dimensions::Dimensions,
+    settings::{
+        load_last_window_settings, save_window_geometry, PersistentWindowSettings, SETTINGS,
+    },
 };
 
-// use renderer::{grid_renderer::GridRenderer, Renderer, RendererSettings};
-// use window::{KeyboardSettings, WindowSettings};
+use window::{KeyboardSettings, WindowSettings};
 
 // pub use channel_utils::*;
 // pub use event_aggregator::*;
 // pub use running_tracker::*;
 
-#[derive(new, PartialEq, Debug, Clone)]
-pub struct Colors {
-    pub foreground: Option<Color4f>,
-    pub background: Option<Color4f>,
-    pub special: Option<Color4f>,
-}
-
-#[derive(PartialEq, Debug, Clone, Copy)]
-pub enum UnderlineStyle {
-    Underline,
-    UnderDouble,
-    UnderDash,
-    UnderDot,
-    UnderCurl,
-}
-
-#[derive(new, Debug, Clone, PartialEq)]
-pub struct Style {
-    pub colors: Colors,
-    #[new(default)]
-    pub reverse: bool,
-    #[new(default)]
-    pub italic: bool,
-    #[new(default)]
-    pub bold: bool,
-    #[new(default)]
-    pub strikethrough: bool,
-    #[new(default)]
-    pub blend: u8,
-    #[new(default)]
-    pub underline: Option<UnderlineStyle>,
-}
-
-impl Style {
-    pub fn foreground(&self, default_colors: &Colors) -> Color4f {
-        if self.reverse {
-            self.colors
-                .background
-                .unwrap_or_else(|| default_colors.background.unwrap())
-        } else {
-            self.colors
-                .foreground
-                .unwrap_or_else(|| default_colors.foreground.unwrap())
-        }
-    }
-
-    pub fn background(&self, default_colors: &Colors) -> Color4f {
-        if self.reverse {
-            self.colors
-                .foreground
-                .unwrap_or_else(|| default_colors.foreground.unwrap())
-        } else {
-            self.colors
-                .background
-                .unwrap_or_else(|| default_colors.background.unwrap())
-        }
-    }
-
-    pub fn special(&self, default_colors: &Colors) -> Color4f {
-        self.colors
-            .special
-            .unwrap_or_else(|| self.foreground(default_colors))
-    }
-}
 
 
 fn main() {

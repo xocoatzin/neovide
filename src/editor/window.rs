@@ -4,7 +4,7 @@ use log::warn;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    // bridge::GridLineCell,
+    bridge::GridLineCell,
     editor::{grid::CharacterGrid, style::Style, AnchorInfo, DrawCommand, DrawCommandBatcher},
     renderer::{LineFragment, WindowDrawCommand},
 };
@@ -112,44 +112,44 @@ impl Window {
         self.redraw();
     }
 
-    // fn modify_grid(
-    //     &mut self,
-    //     row_index: u64,
-    //     column_pos: &mut u64,
-    //     // cell: GridLineCell,
-    //     defined_styles: &HashMap<u64, Arc<Style>>,
-    //     previous_style: &mut Option<Arc<Style>>,
-    // ) {
-    //     // Get the defined style from the style list
-    //     let style = match cell.highlight_id {
-    //         Some(0) => None,
-    //         Some(style_id) => defined_styles.get(&style_id).cloned(),
-    //         None => previous_style.clone(),
-    //     };
-    //
-    //     // Compute text
-    //     let mut text = cell.text;
-    //     if let Some(times) = cell.repeat {
-    //         text = text.repeat(times as usize);
-    //     }
-    //
-    //     // Insert the contents of the cell into the grid.
-    //     if text.is_empty() {
-    //         if let Some(cell) = self.grid.get_cell_mut(*column_pos, row_index) {
-    //             *cell = (text, style.clone());
-    //         }
-    //         *column_pos += 1;
-    //     } else {
-    //         for character in text.graphemes(true) {
-    //             if let Some(cell) = self.grid.get_cell_mut(*column_pos, row_index) {
-    //                 *cell = (character.to_string(), style.clone());
-    //             }
-    //             *column_pos += 1;
-    //         }
-    //     }
-    //
-    //     *previous_style = style;
-    // }
+    fn modify_grid(
+        &mut self,
+        row_index: u64,
+        column_pos: &mut u64,
+        cell: GridLineCell,
+        defined_styles: &HashMap<u64, Arc<Style>>,
+        previous_style: &mut Option<Arc<Style>>,
+    ) {
+        // Get the defined style from the style list
+        let style = match cell.highlight_id {
+            Some(0) => None,
+            Some(style_id) => defined_styles.get(&style_id).cloned(),
+            None => previous_style.clone(),
+        };
+
+        // Compute text
+        let mut text = cell.text;
+        if let Some(times) = cell.repeat {
+            text = text.repeat(times as usize);
+        }
+
+        // Insert the contents of the cell into the grid.
+        if text.is_empty() {
+            if let Some(cell) = self.grid.get_cell_mut(*column_pos, row_index) {
+                *cell = (text, style.clone());
+            }
+            *column_pos += 1;
+        } else {
+            for character in text.graphemes(true) {
+                if let Some(cell) = self.grid.get_cell_mut(*column_pos, row_index) {
+                    *cell = (character.to_string(), style.clone());
+                }
+                *column_pos += 1;
+            }
+        }
+
+        *previous_style = style;
+    }
 
     // Build a line fragment for the given row starting from current_start up until the next style
     // change or double width character.
@@ -205,41 +205,41 @@ impl Window {
         self.send_command(WindowDrawCommand::DrawLine(line_fragments));
     }
 
-    // pub fn draw_grid_line(
-    //     &mut self,
-    //     row: u64,
-    //     column_start: u64,
-    //     // cells: Vec<GridLineCell>,
-    //     defined_styles: &HashMap<u64, Arc<Style>>,
-    // ) {
-    //     let mut previous_style = None;
-    //     if row < self.grid.height {
-    //         let mut column_pos = column_start;
-    //         for cell in cells {
-    //             self.modify_grid(
-    //                 row,
-    //                 &mut column_pos,
-    //                 cell,
-    //                 defined_styles,
-    //                 &mut previous_style,
-    //             );
-    //         }
-    //
-    //         // Due to the limitations of the current rendering strategy, some underlines get
-    //         // clipped by the line below. To mitigate that, we redraw the adjacent lines whenever
-    //         // an individual line is redrawn. Unfortunately, some clipping still happens.
-    //         // TODO: figure out how to solve this
-    //         if row < self.grid.height - 1 {
-    //             self.redraw_line(row + 1);
-    //         }
-    //         self.redraw_line(row);
-    //         if row > 0 {
-    //             self.redraw_line(row - 1);
-    //         }
-    //     } else {
-    //         warn!("Draw command out of bounds");
-    //     }
-    // }
+    pub fn draw_grid_line(
+        &mut self,
+        row: u64,
+        column_start: u64,
+        cells: Vec<GridLineCell>,
+        defined_styles: &HashMap<u64, Arc<Style>>,
+    ) {
+        let mut previous_style = None;
+        if row < self.grid.height {
+            let mut column_pos = column_start;
+            for cell in cells {
+                self.modify_grid(
+                    row,
+                    &mut column_pos,
+                    cell,
+                    defined_styles,
+                    &mut previous_style,
+                );
+            }
+
+            // Due to the limitations of the current rendering strategy, some underlines get
+            // clipped by the line below. To mitigate that, we redraw the adjacent lines whenever
+            // an individual line is redrawn. Unfortunately, some clipping still happens.
+            // TODO: figure out how to solve this
+            if row < self.grid.height - 1 {
+                self.redraw_line(row + 1);
+            }
+            self.redraw_line(row);
+            if row > 0 {
+                self.redraw_line(row - 1);
+            }
+        } else {
+            warn!("Draw command out of bounds");
+        }
+    }
 
     pub fn scroll_region(
         &mut self,
@@ -361,16 +361,16 @@ mod tests {
             .try_recv()
             .expect("Could not receive commands");
 
-        // window.draw_grid_line(
-        //     1,
-        //     70,
-        //     vec![GridLineCell {
-        //         text: "|".to_owned(),
-        //         highlight_id: None,
-        //         repeat: None,
-        //     }],
-        //     &HashMap::new(),
-        // );
+        window.draw_grid_line(
+            1,
+            70,
+            vec![GridLineCell {
+                text: "|".to_owned(),
+                highlight_id: None,
+                repeat: None,
+            }],
+            &HashMap::new(),
+        );
 
         assert_eq!(window.grid.get_cell(70, 1), Some(&("|".to_owned(), None)));
 
