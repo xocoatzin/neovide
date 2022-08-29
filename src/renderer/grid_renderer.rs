@@ -55,31 +55,31 @@ impl GridRenderer {
     }
 
     /// Convert PhysicalSize to grid size
-    pub fn convert_physical_to_grid(&self, physical: PhysicalSize<u32>) -> Dimensions {
-        Dimensions::from(physical) / self.font_dimensions
-    }
+    // pub fn convert_physical_to_grid(&self, physical: PhysicalSize<u32>) -> Dimensions {
+    //     Dimensions::from(physical) / self.font_dimensions
+    // }
 
     /// Convert grid size to PhysicalSize
-    pub fn convert_grid_to_physical(&self, grid: Dimensions) -> PhysicalSize<u32> {
-        (grid * self.font_dimensions).into()
-    }
+    // pub fn convert_grid_to_physical(&self, grid: Dimensions) -> PhysicalSize<u32> {
+    //     (grid * self.font_dimensions).into()
+    // }
 
-    pub fn handle_scale_factor_update(&mut self, scale_factor: f64) {
-        self.shaper.update_scale_factor(scale_factor as f32);
-        self.update_font_dimensions();
-    }
+    // pub fn handle_scale_factor_update(&mut self, scale_factor: f64) {
+    //     self.shaper.update_scale_factor(scale_factor as f32);
+    //     self.update_font_dimensions();
+    // }
 
-    pub fn update_font(&mut self, guifont_setting: &str) {
-        self.shaper.update_font(guifont_setting);
-        self.update_font_dimensions();
-    }
+    // pub fn update_font(&mut self, guifont_setting: &str) {
+    //     self.shaper.update_font(guifont_setting);
+    //     self.update_font_dimensions();
+    // }
 
-    fn update_font_dimensions(&mut self) {
-        self.em_size = self.shaper.current_size();
-        self.font_dimensions = self.shaper.font_base_dimensions().into();
-        self.is_ready = true;
-        trace!("Updated font dimensions: {:?}", self.font_dimensions,);
-    }
+    // fn update_font_dimensions(&mut self) {
+    //     self.em_size = self.shaper.current_size();
+    //     self.font_dimensions = self.shaper.font_base_dimensions().into();
+    //     self.is_ready = true;
+    //     trace!("Updated font dimensions: {:?}", self.font_dimensions,);
+    // }
 
     fn compute_text_region(&self, grid_position: (u64, u64), cell_width: u64) -> Rect {
         let (x, y) = grid_position * self.font_dimensions;
